@@ -61,6 +61,39 @@ def escala(ponto, sx, sy, centro=(0, 0)):
     return (px * sx + cx, py * sy + cy)
 
 
+# ======================== FUNÇÕES DE EASING ========================
+
+def ease_in_out_cubic(t):
+    """Suavização cúbica com derivada zero nos extremos.
+    Elimina descontinuidade de velocidade entre fases de animação.
+    Fórmula: 4t³ se t<0.5, senão 1 - (-2t+2)³/2
+    """
+    if t < 0.5:
+        return 4.0 * t * t * t
+    else:
+        p = -2.0 * t + 2.0
+        return 1.0 - p * p * p / 2.0
+
+
+def ease_out_cubic(t):
+    """Saída rápida com desaceleração progressiva.
+    Ideal para fase de golpe (início explosivo, fim suave).
+    Fórmula: 1 - (1-t)³
+    """
+    p = 1.0 - t
+    return 1.0 - p * p * p
+
+
+def ease_out_back(t):
+    """Overshoot com retorno elástico (follow-through).
+    Simula inércia: ultrapassa o destino e volta.
+    Fórmula: 1 + (s+1)(t-1)³ + s(t-1)² onde s=1.70158
+    """
+    s = 1.70158
+    p = t - 1.0
+    return 1.0 + (s + 1.0) * p * p * p + s * p * p
+
+
 # ======================== CLASSE STICK FIGURE ========================
 
 class StickFigure:
@@ -105,6 +138,9 @@ class StickFigure:
         self.pulando = False
         self.vel_y = 0
         self.chao_y = y
+
+        # Spring damping: velocidade horizontal para movimento suave
+        self._vel_x = 0.0
 
     def _calcular_ponto_final(self, inicio, comprimento, angulo):
         """Calcula ponto final de um segmento dado início, comprimento e ângulo."""
@@ -216,54 +252,79 @@ class StickFigure:
         pygame.draw.rect(tela, VERDE, (barra_x, barra_y, int(40 * self.vida / 100), 5))
 
     def animar_idle(self, tempo):
-        """Animação de repouso: leve balanço dos braços (oscilação senoidal)."""
+        """Animação de repouso: balanço dos braços + respiração sutil."""
         oscilacao = math.sin(tempo * 3) * 0.1
         self.angulo_braco_dir = (math.radians(-30) + oscilacao) * self.direcao
         self.angulo_braco_esq = (math.radians(30) - oscilacao) * self.direcao
         self.angulo_perna_dir = math.radians(10) * self.direcao + oscilacao * 0.3
         self.angulo_perna_esq = math.radians(-10) * self.direcao - oscilacao * 0.3
 
+        # Respiração: oscilação vertical sutil (1.5px) e micro-rotação do torso
+        respiracao = math.sin(tempo * 2.5) * 1.5
+        if not self.pulando:
+            self.y = self.chao_y + respiracao
+        self.angulo_torso = math.sin(tempo * 2.5) * 0.02
+
     def animar_soco(self, progresso):
-        """Animação de soco: rotação rápida do braço direito para frente.
+        """Animação de soco com easing e movimento secundário (torso + braço oposto).
         progresso: 0.0 a 1.0 (início ao fim do soco)
         """
         if progresso < 0.4:
             # Preparação (wind-up): braço vai para trás
-            t = progresso / 0.4
+            t = ease_in_out_cubic(progresso / 0.4)
             self.angulo_braco_dir = math.radians(-30 - 60 * t) * self.direcao
             self.angulo_antebraco_dir = math.radians(-20 - 30 * t) * self.direcao
+            # Movimento secundário: torso inclina para trás na preparação
+            self.angulo_torso = -0.15 * t * self.direcao
+            # Braço oposto como contrapeso (vai para trás)
+            self.angulo_braco_esq = (math.radians(30) + 0.3 * t) * self.direcao
         elif progresso < 0.7:
-            # Golpe: braço vai rápido para frente
-            t = (progresso - 0.4) / 0.3
+            # Golpe: braço vai rápido para frente com desaceleração
+            t = ease_out_cubic((progresso - 0.4) / 0.3)
             self.angulo_braco_dir = math.radians(-90 + 140 * t) * self.direcao
             self.angulo_antebraco_dir = math.radians(-50 + 60 * t) * self.direcao
+            # Torso inclina para frente no golpe
+            self.angulo_torso = (-0.15 + 0.30 * t) * self.direcao
+            # Braço oposto balança para frente como contrapeso
+            self.angulo_braco_esq = (math.radians(30) + 0.3 - 0.6 * t) * self.direcao
         else:
-            # Retorno
-            t = (progresso - 0.7) / 0.3
+            # Retorno com overshoot (follow-through)
+            t = ease_out_back((progresso - 0.7) / 0.3)
             self.angulo_braco_dir = math.radians(50 - 80 * t) * self.direcao
             self.angulo_antebraco_dir = math.radians(10 - 30 * t) * self.direcao
+            # Torso retorna à posição neutra
+            self.angulo_torso = 0.15 * (1.0 - t) * self.direcao
+            # Braço oposto retorna
+            self.angulo_braco_esq = (math.radians(30) - 0.3 + 0.3 * t) * self.direcao
 
     def animar_chute(self, progresso):
-        """Animação de chute: rotação da perna da frente em direção ao oponente.
+        """Animação de chute com easing e inclinação do torso como contrapeso.
         Para direcao=1 usa perna_dir, para direcao=-1 usa perna_esq."""
         if progresso < 0.3:
-            t = progresso / 0.3
+            t = ease_in_out_cubic(progresso / 0.3)
             ang_perna = math.radians(-(10 - 70 * t)) * self.direcao
             ang_canela = math.radians(-(5 + 40 * t)) * self.direcao
+            # Torso inclina para trás como contrapeso da perna
+            self.angulo_torso = -0.20 * t * self.direcao
         elif progresso < 0.6:
-            t = (progresso - 0.3) / 0.3
+            t = ease_out_cubic((progresso - 0.3) / 0.3)
             ang_perna = math.radians(-(-60 + 20 * t)) * self.direcao
             ang_canela = math.radians(-(45 - 10 * t)) * self.direcao
+            # Torso mantém inclinação máxima
+            self.angulo_torso = -0.20 * self.direcao
         else:
-            t = (progresso - 0.6) / 0.4
+            t = ease_out_back((progresso - 0.6) / 0.4)
             ang_perna = math.radians(-(-40 + 50 * t)) * self.direcao
             ang_canela = math.radians(-(35 - 30 * t)) * self.direcao
+            # Torso retorna suavemente
+            self.angulo_torso = -0.20 * (1.0 - t) * self.direcao
 
         self.angulo_perna_dir = ang_perna
         self.angulo_canela_dir = ang_canela
 
     def animar_pulo(self, tempo):
-        """Animação de pulo: translação vertical com gravidade simulada."""
+        """Animação de pulo: translação vertical com gravidade simulada
+        e squash/stretch no pouso."""
         if self.pulando:
             self.vel_y += 0.5  # gravidade
             self.y += self.vel_y
@@ -271,6 +332,9 @@ class StickFigure:
                 self.y = self.chao_y
                 self.pulando = False
                 self.vel_y = 0
+                # Squash no pouso: achatamento para dar sensação de peso
+                self.escala_x = 1.15
+                self.escala_y = 0.85
 
     def pular(self):
         if not self.pulando:
@@ -287,6 +351,8 @@ class StickFigure:
             if progresso >= 1.0:
                 self.atacando = False
                 self.frame_ataque = 0
+                # Resetar torso ao fim do ataque
+                self.angulo_torso = 0
             else:
                 if self.tipo_ataque == 'chute':
                     self.animar_chute(progresso)
@@ -444,12 +510,20 @@ class Coreografia:
             pass  # Animação encerra
 
     def _atualizar_movimento(self):
-        """Translação suave (interpolação linear) dos personagens."""
+        """Movimento com spring damping: modelo de mola amortecida.
+        Substitui interpolação linear por aceleração/desaceleração natural.
+        """
+        stiffness = 0.08
+        damping = 0.15
         for lutador in [self.l1, self.l2]:
             if hasattr(lutador, '_meta_x'):
                 diff = lutador._meta_x - lutador.x
-                if abs(diff) > 1:
-                    lutador.x += diff * 0.08  # Interpolação suave
+                if abs(diff) > 0.5:
+                    force = diff * stiffness
+                    lutador._vel_x = (lutador._vel_x + force) * (1.0 - damping)
+                    lutador.x += lutador._vel_x
+                else:
+                    lutador._vel_x = 0.0
 
 
 # ======================== LOOP PRINCIPAL ========================

@@ -188,7 +188,7 @@ Os ângulos dos braços oscilam simetricamente: o braço direito varia em torno 
 
 ### 4.2 Animação de Soco
 
-A animação de soco é dividida em três fases distintas, cada uma utilizando rotações com ângulos progressivos no braço direito:
+Cada personagem possui um atributo `tipo_ataque` que define se o golpe atual é um soco ou chute. O método `atualizar()` verifica esse atributo para despachar a animação correta, garantindo que cada ação da coreografia execute o movimento apropriado. A animação de soco é dividida em três fases distintas, cada uma utilizando rotações com ângulos progressivos no braço direito:
 
 | Fase | Progresso | Rotação Ombro | Rotação Cotovelo | Descrição |
 |------|:---------:|:------------:|:----------------:|-----------|
@@ -208,7 +208,9 @@ A interpolação entre os ângulos é feita de forma linear dentro de cada fase,
 
 ### 4.3 Animação de Chute
 
-Analogamente ao soco, a animação de chute aplica rotações na perna direita. A coxa rotaciona de +10° até −60° (levantamento), enquanto a canela rotaciona de +5° até +45° (extensão), criando o movimento clássico de chute frontal.
+Analogamente ao soco, a animação de chute aplica rotações na perna direita. Os ângulos são calculados em variáveis locais (`ang_perna`, `ang_canela`) e depois atribuídos aos atributos da articulação. A coxa rotaciona de +10° até −60° (levantamento), enquanto a canela rotaciona de +5° até +45° (extensão), criando o movimento clássico de chute frontal.
+
+Um aspecto importante da implementação é que tanto o ângulo da perna quanto o da canela são multiplicados pelo fator `self.direcao`, garantindo que o chute seja espelhado corretamente conforme o lado do lutador. A fórmula utiliza a negação dos ângulos base (`math.radians(−(valor))`) para inverter a direção do movimento e então multiplica por `direcao` (+1 ou −1) para o espelhamento lateral.
 
 ![Animação de Chute](images/frame_04_chute.png)
 *Figura 5: Animação de chute com rotações compostas na perna.*
@@ -316,7 +318,53 @@ def animar_soco(self, progresso):
         self.angulo_antebraco_dir = math.radians(10 - 30*t)
 ```
 
-### 5.4 Simulação de Gravidade no Pulo
+### 5.4 Animação de Chute com Direção
+
+```python
+def animar_chute(self, progresso):
+    """Animação de chute com espelhamento por direção."""
+    if progresso < 0.3:
+        t = progresso / 0.3
+        ang_perna = math.radians(-(10 - 70*t)) * self.direcao
+        ang_canela = math.radians(-(5 + 40*t)) * self.direcao
+    elif progresso < 0.6:
+        t = (progresso - 0.3) / 0.3
+        ang_perna = math.radians(-(-60 + 20*t)) * self.direcao
+        ang_canela = math.radians(-(45 - 10*t)) * self.direcao
+    else:
+        t = (progresso - 0.6) / 0.4
+        ang_perna = math.radians(-(-40 + 50*t)) * self.direcao
+        ang_canela = math.radians(-(35 - 30*t)) * self.direcao
+
+    self.angulo_perna_dir = ang_perna
+    self.angulo_canela_dir = ang_canela
+```
+
+### 5.5 Despacho por Tipo de Ataque
+
+```python
+def atualizar(self, tempo):
+    """Atualiza a animação frame a frame."""
+    self.animar_pulo(tempo)
+
+    if self.atacando:
+        self.frame_ataque += 1
+        progresso = self.frame_ataque / 40.0
+        if progresso >= 1.0:
+            self.atacando = False
+            self.frame_ataque = 0
+        else:
+            if self.tipo_ataque == 'chute':
+                self.animar_chute(progresso)
+            else:
+                self.animar_soco(progresso)
+    else:
+        self.animar_idle(tempo)
+```
+
+O atributo `tipo_ataque` é definido pela classe Coreografia a cada evento, garantindo que cada golpe execute a animação correta (soco ou chute) sem depender de alternância cíclica.
+
+### 5.6 Simulação de Gravidade no Pulo
 
 ```python
 def animar_pulo(self, tempo):
