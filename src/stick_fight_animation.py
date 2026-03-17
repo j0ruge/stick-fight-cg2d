@@ -101,6 +101,7 @@ class StickFigure:
         self.escala_y = 1.0
         self.atacando = False
         self.frame_ataque = 0
+        self.tipo_ataque = 'soco'
         self.pulando = False
         self.vel_y = 0
         self.chao_y = y
@@ -243,19 +244,23 @@ class StickFigure:
             self.angulo_antebraco_dir = math.radians(10 - 30 * t) * self.direcao
 
     def animar_chute(self, progresso):
-        """Animação de chute: rotação da perna direita para frente."""
+        """Animação de chute: rotação da perna da frente em direção ao oponente.
+        Para direcao=1 usa perna_dir, para direcao=-1 usa perna_esq."""
         if progresso < 0.3:
             t = progresso / 0.3
-            self.angulo_perna_dir = math.radians(10 - 70 * t) * self.direcao
-            self.angulo_canela_dir = math.radians(5 + 40 * t)
+            ang_perna = math.radians(-(10 - 70 * t)) * self.direcao
+            ang_canela = math.radians(-(5 + 40 * t)) * self.direcao
         elif progresso < 0.6:
             t = (progresso - 0.3) / 0.3
-            self.angulo_perna_dir = math.radians(-60 + 20 * t) * self.direcao
-            self.angulo_canela_dir = math.radians(45 - 10 * t)
+            ang_perna = math.radians(-(-60 + 20 * t)) * self.direcao
+            ang_canela = math.radians(-(45 - 10 * t)) * self.direcao
         else:
             t = (progresso - 0.6) / 0.4
-            self.angulo_perna_dir = math.radians(-40 + 50 * t) * self.direcao
-            self.angulo_canela_dir = math.radians(35 - 30 * t)
+            ang_perna = math.radians(-(-40 + 50 * t)) * self.direcao
+            ang_canela = math.radians(-(35 - 30 * t)) * self.direcao
+
+        self.angulo_perna_dir = ang_perna
+        self.angulo_canela_dir = ang_canela
 
     def animar_pulo(self, tempo):
         """Animação de pulo: translação vertical com gravidade simulada."""
@@ -283,10 +288,10 @@ class StickFigure:
                 self.atacando = False
                 self.frame_ataque = 0
             else:
-                if self.frame_ataque % 80 < 40:
-                    self.animar_soco(progresso)
-                else:
+                if self.tipo_ataque == 'chute':
                     self.animar_chute(progresso)
+                else:
+                    self.animar_soco(progresso)
         else:
             self.animar_idle(tempo)
 
@@ -381,6 +386,7 @@ class Coreografia:
         elif acao == 'l1_soco':
             self.l1.atacando = True
             self.l1.frame_ataque = 0
+            self.l1.tipo_ataque = 'soco'
             self.l2.vida -= 15
             self.l2.escala_x = 1.2
             self.l2.escala_y = 0.85
@@ -394,6 +400,7 @@ class Coreografia:
         elif acao == 'l2_chute':
             self.l2.atacando = True
             self.l2.frame_ataque = 0
+            self.l2.tipo_ataque = 'chute'
             self.l1.vida -= 20
             self.l1.escala_x = 0.85
             self.l1.escala_y = 1.15
@@ -405,6 +412,7 @@ class Coreografia:
         elif acao == 'l1_soco_aereo':
             self.l1.atacando = True
             self.l1.frame_ataque = 0
+            self.l1.tipo_ataque = 'soco'
             self.l2.vida -= 25
             self.l2.escala_x = 1.3
             self.l2.escala_y = 0.8
@@ -417,6 +425,7 @@ class Coreografia:
         elif acao == 'l2_soco':
             self.l2.atacando = True
             self.l2.frame_ataque = 0
+            self.l2.tipo_ataque = 'soco'
             self.l1.vida -= 15
             for _ in range(5):
                 self.particulas.append(Particula(
@@ -424,6 +433,7 @@ class Coreografia:
         elif acao == 'l1_chute':
             self.l1.atacando = True
             self.l1.frame_ataque = 0
+            self.l1.tipo_ataque = 'chute'
             self.l2.vida -= 20
             for _ in range(5):
                 self.particulas.append(Particula(
